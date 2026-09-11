@@ -1,6 +1,14 @@
+/**
+ * fastapi-docs-plus frontend bootstrap.
+ *
+ * Renders the top bar (extra environment variables / identity / language),
+ * patches outgoing requests through the server-side pre-request hooks, and
+ * injects AI generate / fill buttons into every operation summary.
+ */
 (function () {
   "use strict";
 
+  /** Configuration injected by docs_plus.py at render time. */
   var CONFIG = JSON.parse(document.getElementById("docs-plus-config").textContent);
   var ENV_STORAGE_KEY = "docsPlus.env";
   var LANGUAGE_STORAGE_KEY = "docsPlus.language";
@@ -10,6 +18,8 @@
   var languageVersion = 0;
   var countsVersion = 0;
   var aiCounts = {};
+
+  /** Localized UI strings; also covers error codes thrown by adapter.js. */
   var MESSAGES = {
     en: {
       language: "Language",
@@ -35,30 +45,35 @@
       bodyActionMissing: "This Swagger UI version has no setRequestBodyValue action; update adapter.js to fill the request body",
     },
     zh: {
-      language: "语言",
-      extraEnv: "额外环境变量（JSON，会随每次请求传给 pre_request 钩子）",
-      envSaved: "环境变量已保存",
-      invalidEnv: "环境变量格式错误：请输入有效的 JSON 对象",
-      noHook: "未注册 pre_request 钩子",
-      aiDisabled: "AI 填充未启用（缺少 DOCS_PLUS_LLM_API_KEY）",
-      identity: "调用身份",
-      identityChanged: "调用身份已切换为 {identity}",
-      hookFailed: "前置钩子执行失败：{detail}",
-      hookRequestFailed: "前置钩子请求异常：{detail}",
-      generate: "AI 生成",
-      generating: "生成中…",
-      generateTitle: "调用 LLM 按该接口 schema 生成一组入参并存入缓存队列（不改动表单）；历史结果会参与去重",
-      fill: "填充 ({count})",
-      fillTitle: "把缓存的生成结果轮换填入表单；括号内为当前缓存条数",
-      generated: "已生成并缓存，该接口当前 {count} 条",
-      generateFailed: "AI 生成失败：{detail}",
-      filled: "已填充第 {index}/{count} 条缓存（{fields} 个字段）",
-      parameterNotFound: "OpenAPI 中找不到参数 {parameter}，跳过回填",
-      paramActionMissing: "当前 swagger-ui 版本没有 changeParamByIdentity action，参数回填需要适配 adapter.js",
-      bodyActionMissing: "当前 swagger-ui 版本没有 setRequestBodyValue action，请求体回填需要适配 adapter.js",
+      language: "\u8BED\u8A00",
+      extraEnv: "\u989D\u5916\u73AF\u5883\u53D8\u91CF\uFF08JSON\uFF0C\u4F1A\u968F\u6BCF\u6B21\u8BF7\u6C42\u4F20\u7ED9 pre_request \u94A9\u5B50\uFF09",
+      envSaved: "\u73AF\u5883\u53D8\u91CF\u5DF2\u4FDD\u5B58",
+      invalidEnv: "\u73AF\u5883\u53D8\u91CF\u683C\u5F0F\u9519\u8BEF\uFF1A\u8BF7\u8F93\u5165\u6709\u6548\u7684 JSON \u5BF9\u8C61",
+      noHook: "\u672A\u6CE8\u518C pre_request \u94A9\u5B50",
+      aiDisabled: "AI \u586B\u5145\u672A\u542F\u7528\uFF08\u7F3A\u5C11 DOCS_PLUS_LLM_API_KEY\uFF09",
+      identity: "\u8C03\u7528\u8EAB\u4EFD",
+      identityChanged: "\u8C03\u7528\u8EAB\u4EFD\u5DF2\u5207\u6362\u4E3A {identity}",
+      hookFailed: "\u524D\u7F6E\u94A9\u5B50\u6267\u884C\u5931\u8D25\uFF1A{detail}",
+      hookRequestFailed: "\u524D\u7F6E\u94A9\u5B50\u8BF7\u6C42\u5F02\u5E38\uFF1A{detail}",
+      generate: "AI \u751F\u6210",
+      generating: "\u751F\u6210\u4E2D…",
+      generateTitle: "\u8C03\u7528 LLM \u6309\u8BE5\u63A5\u53E3 schema \u751F\u6210\u4E00\u7EC4\u5165\u53C2\u5E76\u5B58\u5165\u7F13\u5B58\u961F\u5217\uFF08\u4E0D\u6539\u52A8\u8868\u5355\uFF09\uFF1B\u5386\u53F2\u7ED3\u679C\u4F1A\u53C2\u4E0E\u53BB\u91CD",
+      fill: "\u586B\u5145 ({count})",
+      fillTitle: "\u628A\u7F13\u5B58\u7684\u751F\u6210\u7ED3\u679C\u8F6E\u6362\u586B\u5165\u8868\u5355\uFF1B\u62EC\u53F7\u5185\u4E3A\u5F53\u524D\u7F13\u5B58\u6761\u6570",
+      generated: "\u5DF2\u751F\u6210\u5E76\u7F13\u5B58\uFF0C\u8BE5\u63A5\u53E3\u5F53\u524D {count} \u6761",
+      generateFailed: "AI \u751F\u6210\u5931\u8D25\uFF1A{detail}",
+      filled: "\u5DF2\u586B\u5145\u7B2C {index}/{count} \u6761\u7F13\u5B58\uFF08{fields} \u4E2A\u5B57\u6BB5\uFF09",
+      parameterNotFound: "OpenAPI \u4E2D\u627E\u4E0D\u5230\u53C2\u6570 {parameter}\uFF0C\u8DF3\u8FC7\u56DE\u586B",
+      paramActionMissing: "\u5F53\u524D swagger-ui \u7248\u672C\u6CA1\u6709 changeParamByIdentity action\uFF0C\u53C2\u6570\u56DE\u586B\u9700\u8981\u9002\u914D adapter.js",
+      bodyActionMissing: "\u5F53\u524D swagger-ui \u7248\u672C\u6CA1\u6709 setRequestBodyValue action\uFF0C\u8BF7\u6C42\u4F53\u56DE\u586B\u9700\u8981\u9002\u914D adapter.js",
     },
   };
 
+  /**
+   * Read the persisted UI language.
+   *
+   * @returns {"en"|"zh"} Stored language, defaulting to "en".
+   */
   function readLanguage() {
     try {
       return localStorage.getItem(LANGUAGE_STORAGE_KEY) === "zh" ? "zh" : "en";
@@ -67,18 +82,44 @@
     }
   }
 
+  /**
+   * Interpolate {placeholder} tokens in a localized message.
+   *
+   * @param {string} key - Key in MESSAGES[language].
+   * @param {Object} [values] - Replacement values keyed by placeholder name.
+   * @returns {string} Localized message with placeholders resolved.
+   */
   function t(key, values) {
     return MESSAGES[language][key].replace(/\{(\w+)\}/g, function (match, name) {
       return values && values[name] !== undefined ? String(values[name]) : match;
     });
   }
 
+  /**
+   * Resolve an error to a localized message.
+   *
+   * Errors carrying a `code` recognised by the current language table are
+   * localised; everything else falls back to `err.message`.
+   *
+   * @param {Error} err - Error thrown by adapter.js or a fetch call.
+   * @returns {string} Human-readable message.
+   */
   function errorMessage(err) {
     return err.code && Object.prototype.hasOwnProperty.call(MESSAGES[language], err.code)
       ? t(err.code, err.values)
       : err.message;
   }
 
+  /**
+   * Create an element whose text content is bound to an i18n key.
+   *
+   * The returned element has a `data-i18n` attribute so that
+   * {@link refreshLanguage} can update it later.
+   *
+   * @param {string} tag - HTML tag name.
+   * @param {string} key - Key in MESSAGES[language].
+   * @returns {HTMLElement} Element with `data-i18n` set and translated text.
+   */
   function localizedElement(tag, key) {
     var element = document.createElement(tag);
     element.dataset.i18n = key;
@@ -86,6 +127,9 @@
     return element;
   }
 
+  /**
+   * Re-apply translations to every element tagged with `data-i18n`.
+   */
   function refreshLanguage() {
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.querySelectorAll("[data-i18n]").forEach(function (element) {
@@ -105,6 +149,11 @@
     refreshFillButtons();
   }
 
+  /**
+   * Switch the UI language and resynchronise AI cache counts.
+   *
+   * @param {"en"|"zh"} next - Target language.
+   */
   function changeLanguage(next) {
     if (next === language) return;
     language = next;
@@ -121,6 +170,11 @@
     loadCounts();
   }
 
+  /**
+   * Read persisted environment variables.
+   *
+   * @returns {Object} Stored environment object, or {} when unset / invalid.
+   */
   function readEnv() {
     try {
       var raw = JSON.parse(localStorage.getItem(ENV_STORAGE_KEY));
@@ -130,10 +184,23 @@
     }
   }
 
+  /**
+   * Persist environment variables.
+   *
+   * @param {Object} env - Environment object to store.
+   */
   function writeEnv(env) {
     localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(env));
   }
 
+  /**
+   * Build the environment payload sent to the pre-request endpoint.
+   *
+   * Merges the extra environment JSON into the top level and adds the
+   * selected identity.
+   *
+   * @returns {Object} Payload for the `env` field of the pre-request body.
+   */
   function envPayload() {
     var env = readEnv();
     var payload = {};
@@ -146,6 +213,13 @@
     return payload;
   }
 
+  /**
+   * Show a transient toast message.
+   *
+   * @param {string} message - Message text.
+   * @param {boolean} [isError] - When true, render as an error (longer
+   *   timeout, red background).
+   */
   function toast(message, isError) {
     var el = document.getElementById("docs-plus-toast");
     el.textContent = message;
@@ -157,6 +231,9 @@
     }, isError ? 8000 : 3000);
   }
 
+  /**
+   * Build the top bar: extra environment editor, identity and language selectors.
+   */
   function buildBar() {
     var bar = document.getElementById("docs-plus-bar");
     var env = readEnv();
@@ -227,7 +304,7 @@
     languageLabel.appendChild(localizedElement("span", "language"));
     var languageSelect = document.createElement("select");
     languageSelect.id = "docs-plus-language";
-    [["en", "English"], ["zh", "简体中文"]].forEach(function (item) {
+    [["en", "English"], ["zh", "\u7B80\u4F53\u4E2D\u6587"]].forEach(function (item) {
       var option = document.createElement("option");
       option.value = item[0];
       option.textContent = item[1];
@@ -243,6 +320,12 @@
     refreshLanguage();
   }
 
+  /**
+   * Convert header values to strings, dropping null/undefined entries.
+   *
+   * @param {Object} [headers] - Raw headers from Swagger UI.
+   * @returns {Object} Stringified headers.
+   */
   function stringifyHeaders(headers) {
     var out = {};
     Object.keys(headers || {}).forEach(function (key) {
@@ -252,6 +335,17 @@
     return out;
   }
 
+  /**
+   * Swagger UI request interceptor: run the server-side pre-request hook.
+   *
+   * Sends the pending request to ``{apiPrefix}/api/pre-request``, then
+   * applies the returned header / query patches in place.  Internal API
+   * calls originating from this plugin are skipped.
+   *
+   * @param {Object} request - Request object provided by Swagger UI's
+   *   requestInterceptor.
+   * @returns {Promise<Object>} The (possibly patched) request.
+   */
   async function applyPreRequest(request) {
     if (!CONFIG.hasPreRequestHook) return request;
     if ((request.url || "").indexOf(CONFIG.apiPrefix + "/api/") !== -1) return request;
@@ -283,14 +377,29 @@
     return request;
   }
 
+  /**
+   * Cache key for an operation.
+   *
+   * @param {{path: string, method: string}} target - Operation target.
+   * @returns {string} Cache key of the form ``"METHOD path"``.
+   */
   function opKey(target) {
     return target.method.toUpperCase() + " " + target.path;
   }
 
+  /**
+   * Cached result count for an operation.
+   *
+   * @param {{path: string, method: string}} target - Operation target.
+   * @returns {number} Number of cached AI-generated results, or 0.
+   */
   function getCount(target) {
     return aiCounts[opKey(target)] || 0;
   }
 
+  /**
+   * Refresh labels and ``aria-disabled`` state of every fill button.
+   */
   function refreshFillButtons() {
     document.querySelectorAll(".docs-plus-fill-btn").forEach(function (btn) {
       var count = aiCounts[btn.getAttribute("data-op-key")] || 0;
@@ -301,12 +410,21 @@
     });
   }
 
+  /**
+   * Update the cached result count of one operation and refresh fill buttons.
+   *
+   * @param {{path: string, method: string}} target - Operation target.
+   * @param {number} count - New cached result count.
+   */
   function setCount(target, count) {
     countsVersion += 1;
     aiCounts[opKey(target)] = count;
     refreshFillButtons();
   }
 
+  /**
+   * Fetch cache counts for all operations of the current language.
+   */
   async function loadCounts() {
     if (!CONFIG.aiEnabled) return;
     var version = ++countsVersion;
@@ -319,10 +437,18 @@
       aiCounts = data.counts || {};
       refreshFillButtons();
     } catch (err) {
-      // The next successful AI operation will resynchronize the cache count.
+      // The next successful AI operation will resynchronise the cache count.
     }
   }
 
+  /**
+   * POST to an AI endpoint and parse the JSON response.
+   *
+   * @param {string} pathSeg - Endpoint path relative to ``CONFIG.apiPrefix``.
+   * @param {{path: string, method: string}} target - Operation target.
+   * @param {"en"|"zh"} requestLanguage - Output language for the request.
+   * @returns {Promise<Object>} Parsed response body.
+   */
   async function postAi(pathSeg, target, requestLanguage) {
     var response = await fetch(CONFIG.apiPrefix + pathSeg, {
       method: "POST",
@@ -344,6 +470,13 @@
     return JSON.parse(text);
   }
 
+  /**
+   * Handle an "AI Generate" click: call the generation endpoint, cache, and
+   * update the count badge.
+   *
+   * @param {{path: string, method: string}} target - Operation target.
+   * @param {HTMLButtonElement} button - The clicked "AI Generate" button.
+   */
   async function handleGenerate(target, button) {
     if (button.disabled) return;
     var requestVersion = languageVersion;
@@ -364,6 +497,15 @@
     }
   }
 
+  /**
+   * Write a cached result envelope into the operation's form fields.
+   *
+   * @param {Object} system - Swagger UI system object.
+   * @param {{path: string, method: string}} target - Operation target.
+   * @param {Object} data - Envelope with ``path``, ``query``, ``header``,
+   *   ``cookie`` and ``body`` keys.
+   * @returns {number} Number of fields successfully filled.
+   */
   function applyEnvelope(system, target, data) {
     var filled = 0;
     ["path", "query", "header", "cookie"].forEach(function (location) {
@@ -385,6 +527,14 @@
     return filled;
   }
 
+  /**
+   * Handle a "Fill" click: fetch the next cached result and apply it to the
+   * form.
+   *
+   * @param {Object} system - Swagger UI system object.
+   * @param {{path: string, method: string}} target - Operation target.
+   * @param {HTMLButtonElement} button - The clicked "Fill" button.
+   */
   async function handleFill(system, target, button) {
     if (getCount(target) === 0 || button.dataset.busy) return;
     var requestVersion = languageVersion;
@@ -407,6 +557,14 @@
     }
   }
 
+  /**
+   * Swagger UI plugin providing the per-operation AI buttons.
+   *
+   * @param {Object} system - Swagger UI system object injected by the
+   *   plugin system.
+   * @returns {Object} Plugin descriptor wrapping the ``OperationSummary``
+   *   component.
+   */
   function AiFillPlugin(system) {
     return {
       wrapComponents: {
@@ -459,6 +617,7 @@
     };
   }
 
+  // Bootstrap: build the top bar and start Swagger UI.
   window.addEventListener("load", function () {
     buildBar();
     var params = Object.assign({}, CONFIG.swaggerUiParameters, {

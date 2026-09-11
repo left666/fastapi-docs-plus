@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-# title 对 LLM 几乎无信息量（多为字段名重复），去掉可省大量 token
+# "title" carries almost no signal for the LLM (it often duplicates
+# the field name), so dropping it saves a significant number of tokens.
 _DROP_KEYS = {"title"}
 _INLINED_CONTAINERS = ("$defs", "definitions")
 _MAP_KEYS = ("properties", "patternProperties")
@@ -37,7 +38,20 @@ def flatten_schema(
     _depth: int = 0,
     _stack: tuple[str, ...] = (),
 ) -> Any:
-    """内联 $ref 并截断递归/超深结构，产出可直接喂给 LLM 的自包含 schema。"""
+    """Inline ``$ref`` pointers and truncate recursive / over-deep structures.
+
+    Produces a self-contained schema that can be fed directly to an LLM.
+
+    Args:
+        schema: The JSON Schema fragment to process.
+        root: The root OpenAPI document (used for ``$ref`` resolution).
+        max_depth: Maximum nesting depth before truncation.
+        _depth: Internal recursion depth tracker.
+        _stack: Internal ``$ref`` chain for cycle detection.
+
+    Returns:
+        A flattened, self-contained schema dict.
+    """
     if not isinstance(schema, dict):
         return schema
 
@@ -45,10 +59,10 @@ def flatten_schema(
     if isinstance(ref, str):
         name = ref.rsplit("/", 1)[-1]
         if ref in _stack:
-            return {"type": "object", "description": f"递归引用 {name}，只生成一层即可"}
+            return {"type": "object", "description": f"Recursive reference {name}; generate one level only"}
         target = _resolve_pointer(ref, root)
         if target is None:
-            return {"type": "object", "description": f"未能解析的引用 {ref}"}
+            return {"type": "object", "description": f"Unresolvable reference {ref}"}
         sibling = {k: v for k, v in schema.items() if k != "$ref"}
         return flatten_schema(
             {**target, **sibling},
@@ -59,7 +73,7 @@ def flatten_schema(
         )
 
     if _depth >= max_depth:
-        return {"type": schema.get("type", "object"), "description": "已达展开深度上限，可自由取值"}
+        return {"type": schema.get("type", "object"), "description": "Reached max depth; free-form values allowed"}
 
     out: dict[str, Any] = {}
     for key, value in schema.items():
@@ -91,13 +105,32 @@ def _pick_body_content(request_body: dict) -> tuple[str | None, dict | None]:
 
 
 def build_operation_spec(openapi: dict, path: str, method: str, *, max_depth: int = 4) -> dict:
-    """抽取单个操作的自包含描述，供 LLM 生成入参。"""
+    """Extract a self-contained description of a single OpenAPI operation.
+
+    The result is suitable for sending to an LLM to generate parameter
+    values.
+
+    Args:
+        openapi: The full OpenAPI document (``app.openapi()``).
+        path: The URL path (e.g. ``"/users/{id}"``).
+        method: The HTTP method (e.g. ``"get"``, ``"post"``).
+        max_depth: Maximum schema nesting depth.
+
+    Returns:
+        A dict with keys ``method``, ``path``, ``summary``,
+        ``description``, ``parameters``, and optionally
+        ``requestBody`` and ``businessHint``.
+
+    Raises:
+        KeyError: If the path or operation does not exist in the
+            OpenAPI document.
+    """
     path_item = (openapi.get("paths") or {}).get(path)
     if not isinstance(path_item, dict):
-        raise KeyError(f"OpenAPI 中不存在路径 {path}")
+        raise KeyError(f"Path not found in OpenAPI: {path}")
     operation = path_item.get(method.lower())
     if not isinstance(operation, dict):
-        raise KeyError(f"OpenAPI 中不存在操作 {method.upper()} {path}")
+        raise KeyError(f"Operation not found in OpenAPI: {method.upper()} {path}")
 
     parameters = []
     shared = path_item.get("parameters") or []

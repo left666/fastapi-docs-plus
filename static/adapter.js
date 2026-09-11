@@ -1,16 +1,30 @@
 /**
- * swagger-ui 内部 action/selector 不是稳定公开 API，跨版本会变。
- * 所有对它们的调用只允许出现在这个文件里，升级 swagger-ui 时只需改这里。
- * 已验证版本：swagger-ui-dist 5.x
+ * Compatibility layer for Swagger UI internals.
+ *
+ * Swagger UI's internal actions and selectors are not a stable public API and
+ * may change between releases. Every call into them is confined to this file,
+ * so upgrading Swagger UI only requires adapting this module.
+ * Verified against: swagger-ui-dist 5.x
  */
 (function () {
   "use strict";
 
   /**
-   * 必须取「未合并 meta」的原始参数对象：
-   * swagger-ui 把参数值存在 `${in}.${name}.hash-${param.hashCode()}` 下，
-   * 而 ParameterRow 读的是原始参数算出的 hash。用 operationWithMeta 拿到的对象
-   * 带 value/errors，hashCode 不同，写入会落到没人读的键上，表现为静默失效。
+   * Find the raw (meta-free) parameter object for the given name and location.
+   *
+   * Swagger UI stores parameter values under keys of the form
+   * `${in}.${name}.hash-${param.hashCode()}`, where the hash is computed from
+   * the raw parameter object that ParameterRow reads. Objects returned by
+   * `operationWithMeta()` carry `value` / `errors` fields, produce a different
+   * hash, and writing through them lands on a key nobody reads, failing
+   * silently.
+   *
+   * @param {Object} system - Swagger UI system object.
+   * @param {string} path - Operation path, e.g. "/shops/{shop_id}".
+   * @param {string} method - Lowercase HTTP method, e.g. "get".
+   * @param {string} name - Parameter name.
+   * @param {string} location - One of "path", "query", "header", "cookie".
+   * @returns {Object|null} Raw parameter object, or null when not found.
    */
   function findRawParam(system, path, method, name, location) {
     var selectors = system.specSelectors;
@@ -38,15 +52,31 @@
     return null;
   }
 
+  /**
+   * Convert a JSON value into the shape expected by Swagger UI field components.
+   *
+   * Array parameters are returned as arrays because the array input component
+   * expects the array itself; serializing them would render a single string item.
+   *
+   * @param {*} value - Raw JSON value.
+   * @returns {string|Array} Value ready to be written into the form field.
+   */
   function toFieldValue(value) {
     if (value === null || value === undefined) return "";
     if (typeof value === "string") return value;
-    // 数组参数的输入组件期望数组本身，序列化会导致 swagger-ui 渲染成单个字符串项
     if (Array.isArray(value)) return value.map(toFieldValue);
     if (typeof value === "object") return JSON.stringify(value);
     return String(value);
   }
 
+  /**
+   * Build an Error carrying a message code and its interpolation values.
+   *
+   * @param {string} code - Message code recognized by docs-plus.js.
+   * @param {string} message - Fallback English message.
+   * @param {Object} [values] - Values interpolated into the localized message.
+   * @returns {Error} Decorated error object.
+   */
   function adapterError(code, message, values) {
     var error = new Error(message);
     error.code = code;
@@ -56,8 +86,15 @@
 
   window.DocsPlusAdapter = {
     /**
-     * 折叠状态下 RequestBody 组件尚未挂载，它挂载时会用自动生成的样例覆盖我们写入的值，
-     * 所以回填前必须先把接口展开。
+     * Expand the operation block so its RequestBody component gets mounted.
+     *
+     * While collapsed, the RequestBody component is not mounted yet and its
+     * automatically generated example overwrites the values we write on mount,
+     * so the block must be expanded before filling anything.
+     *
+     * @param {HTMLElement} button - AI button inside the operation summary.
+     * @returns {Promise<void>} Resolves once the block is expanded, or
+     *   immediately when it is already expanded.
      */
     ensureOperationExpanded: function (button) {
       var block = button && button.closest ? button.closest(".opblock") : null;
@@ -70,6 +107,20 @@
       });
     },
 
+    /**
+     * Write a value into a single parameter field.
+     *
+     * @param {Object} system - Swagger UI system object.
+     * @param {string} path - Operation path, e.g. "/shops/{shop_id}".
+     * @param {string} method - Lowercase HTTP method, e.g. "get".
+     * @param {string} name - Parameter name.
+     * @param {string} location - One of "path", "query", "header", "cookie".
+     * @param {*} value - Value to write.
+     * @returns {boolean} True on success.
+     * @throws {Error} With code "parameterNotFound" when the parameter is not
+     *   declared in the OpenAPI document, or "paramActionMissing" when the
+     *   Swagger UI version lacks the required action.
+     */
     setParamValue: function (system, path, method, name, location, value) {
       var param = findRawParam(system, path, method, name, location);
       if (!param) {
@@ -84,6 +135,17 @@
       return true;
     },
 
+    /**
+     * Write the request body into the body editor.
+     *
+     * @param {Object} system - Swagger UI system object.
+     * @param {string} path - Operation path, e.g. "/shops/{shop_id}".
+     * @param {string} method - Lowercase HTTP method, e.g. "post".
+     * @param {*} value - Body value; non-strings are pretty-printed as JSON.
+     * @returns {boolean} True on success.
+     * @throws {Error} With code "bodyActionMissing" when the Swagger UI
+     *   version lacks the required action.
+     */
     setRequestBody: function (system, path, method, value) {
       var text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
       if (system.oas3Actions && system.oas3Actions.setRequestBodyValue) {
@@ -93,17 +155,32 @@
       throw adapterError("bodyActionMissing", "Swagger UI is missing the setRequestBodyValue action");
     },
 
+    /**
+     * Trigger parameter validation after filling.
+     *
+     * Validation is best-effort; a failure does not affect the filled values.
+     *
+     * @param {Object} system - Swagger UI system object.
+     * @param {string} path - Operation path, e.g. "/shops/{shop_id}".
+     * @param {string} method - Lowercase HTTP method, e.g. "get".
+     */
     validateParams: function (system, path, method) {
       try {
         if (system.specActions && system.specActions.validateParams) {
           system.specActions.validateParams([path, method], false);
         }
       } catch (err) {
-        /* 校验只是顺手触发，失败不影响回填结果 */
+        /* Validation is best-effort; failures must not affect the filled values. */
       }
     },
 
-    /** 从 OperationSummary 的 props 里读出 path/method */
+    /**
+     * Read the path and method from an OperationSummary component's props.
+     *
+     * @param {Object} props - Props of the OperationSummary component.
+     * @returns {{path: string, method: string}|null} Path and method, or null
+     *   when they cannot be determined.
+     */
     readPathMethod: function (props) {
       var operationProps = props && props.operationProps;
       if (operationProps && typeof operationProps.get === "function") {

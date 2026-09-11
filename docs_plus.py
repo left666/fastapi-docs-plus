@@ -41,7 +41,16 @@ class _PreRequestPayload(BaseModel):
 
 
 class DocsPlus:
-    """增强版交互式文档：AI 填充入参 + Python 侧前置钩子。"""
+    """Enhanced interactive API docs with AI parameter filling and Python-side pre-request hooks.
+
+    Usage::
+
+        docs = DocsPlus(app, DocsPlusConfig(...))
+
+        @docs.pre_request
+        async def inject_auth(ctx: PreRequestContext) -> None:
+            ctx.headers["Authorization"] = f"Bearer {token}"
+    """
 
     def __init__(self, app: FastAPI, config: DocsPlusConfig | None = None) -> None:
         self.app = app
@@ -50,7 +59,18 @@ class DocsPlus:
         self._register_routes()
 
     def pre_request(self, hook: PreRequestHook) -> PreRequestHook:
-        """注册前置钩子，多个钩子按注册顺序执行。"""
+        """Register a pre-request hook.
+
+        Multiple hooks execute in registration order and share the same
+        :class:`PreRequestContext`.
+
+        Args:
+            hook: A synchronous or asynchronous callable that receives a
+                :class:`PreRequestContext`.
+
+        Returns:
+            The same callable (allows use as a decorator).
+        """
         self._hooks.append(hook)
         return hook
 
@@ -137,4 +157,16 @@ class DocsPlus:
 
 
 def setup_docs_plus(app: FastAPI, config: DocsPlusConfig | None = None) -> DocsPlus:
+    """Create and register a :class:`DocsPlus` instance on the given FastAPI application.
+
+    This is a convenience wrapper around ``DocsPlus(app, config)``.
+
+    Args:
+        app: The FastAPI application instance.
+        config: Optional configuration. Falls back to defaults.
+
+    Returns:
+        The :class:`DocsPlus` instance (use it to register hooks via
+        :meth:`DocsPlus.pre_request`).
+    """
     return DocsPlus(app, config)

@@ -33,10 +33,28 @@ _MESSAGES: dict[Language, dict[str, str]] = {
 
 
 def translate(message_key: str, language: Language = "en", **params: Any) -> str:
+    """Look up a localized message and format it with the given parameters.
+
+    Args:
+        message_key: Key into the message dictionary.
+        language: Target language (``"en"`` or ``"zh"``).
+        **params: Format-string parameters injected via ``str.format``.
+
+    Returns:
+        The formatted localized string.
+    """
     return _MESSAGES[language][message_key].format(**params)
 
 
 def language_instruction(language: Language = "en") -> str:
+    """Return a system-level language instruction for the LLM prompt.
+
+    Args:
+        language: Target language (``"en"`` or ``"zh"``).
+
+    Returns:
+        A short instruction string such as ``"Output language: English."``.
+    """
     return {
         "en": "Output language: English.",
         "zh": "Output language: Simplified Chinese.",

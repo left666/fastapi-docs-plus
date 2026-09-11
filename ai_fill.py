@@ -6,8 +6,10 @@ import re
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
+
 from openai import AsyncOpenAI
 from jsonschema import Draft202012Validator
+
 from .config import DocsPlusConfig
 from .i18n import Language, language_instruction, translate
 
@@ -30,12 +32,19 @@ Output rules:
 
 
 class AIFillError(RuntimeError):
+    """Raised when AI parameter generation fails for a known reason.
+
+    The error carries a localizable message key so callers can present
+    user-facing messages in the appropriate language.
+    """
+
     def __init__(self, message_key: str, **params: Any) -> None:
         self.message_key = message_key
         self.params = params
         super().__init__(self.localize())
 
     def localize(self, language: Language = "en") -> str:
+        """Return the error message localized to *language*."""
         params = {
             key: value.localize(language) if isinstance(value, AIFillError) else value
             for key, value in self.params.items()
@@ -43,11 +52,15 @@ class AIFillError(RuntimeError):
         return translate(self.message_key, language, **params)
 
 
-# ------------------------------------------------------------------ 缓存
+# ------------------------------------------------------------------ Cache
 
 @dataclass
 class _OpCache:
-    """单个接口的生成结果队列。cursor 单调递增后取模轮换，淘汰最旧不影响轮换顺序。"""
+    """Per-operation queue of cached generation results.
+
+    The cursor advances monotonically then wraps via modulo so that
+    evicting the oldest entry does not disturb the round-robin order.
+    """
 
     schema_fingerprint: str
     items: deque[dict] = field(default_factory=deque)
@@ -66,6 +79,10 @@ def _fingerprint(op_spec: dict) -> str:
 
 
 def next_fill(path: str, method: str, language: Language = "en") -> dict | None:
+    """Retrieve the next cached result for a given operation in round-robin order.
+
+    Returns ``None`` when the cache is empty.
+    """
     entry = _CACHES.get((language, _op_key(path, method)))
     if entry is None or not entry.items:
         return None
@@ -75,6 +92,7 @@ def next_fill(path: str, method: str, language: Language = "en") -> dict | None:
 
 
 def cache_counts(language: Language = "en") -> dict[str, int]:
+    """Return a mapping of ``"METHOD path"`` to cached-item count for *language*."""
     return {
         key: len(entry.items)
         for (entry_language, key), entry in _CACHES.items()
@@ -82,7 +100,8 @@ def cache_counts(language: Language = "en") -> dict[str, int]:
     }
 
 
-# ------------------------------------------------------------------ 生成
+# ------------------------------------------------------------------ Generation
+
 
 def _build_client(config: DocsPlusConfig):
     if not config.llm_api_key:
@@ -102,7 +121,7 @@ def _normalize(data: Any) -> dict:
 
 
 def _prune(data: dict, op_spec: dict) -> dict:
-    """丢掉模型编造的、schema 里并未声明的参数，避免回填出无效字段。"""
+    """Remove parameters the model invented that are not declared in the schema."""
     declared: dict[str, set[str]] = {location: set() for location in _LOCATIONS}
     for param in op_spec.get("parameters", []):
         location = param.get("in")
@@ -149,12 +168,32 @@ async def _complete(client, config: DocsPlusConfig, messages: list[dict], temper
 async def generate_and_cache(
     op_spec: dict, config: DocsPlusConfig, *, path: str, method: str, language: Language = "en"
 ) -> int:
-    """生成一组入参，只有通过 jsonschema 校验才入队。返回当前缓存条数。"""
+    """Generate parameter values via LLM and cache them on validation success.
+
+    Only results that pass ``jsonschema`` validation against the
+    operation's ``requestBody`` are added to the in-memory cache.
+    Returns the current number of cached items for this operation.
+
+    Args:
+        op_spec: Self-contained operation spec from
+            :func:`build_operation_spec`.
+        config: Global ``DocsPlusConfig``.
+        path: URL path for cache keying.
+        method: HTTP method for cache keying.
+        language: Output language for generated values.
+
+    Returns:
+        Number of cached items after insertion.
+
+    Raises:
+        AIFillError: On configuration issues, schema size overflow,
+            empty LLM responses, or repeated validation failure.
+    """
     key = (language, _op_key(path, method))
     fingerprint = _fingerprint(op_spec)
     entry = _CACHES.get(key)
     if entry is None or entry.schema_fingerprint != fingerprint:
-        # schema 变了，旧缓存（以及作为上下文的历史）全部作废
+        # Schema changed — discard old cache (including history used as context)
         entry = _OpCache(schema_fingerprint=fingerprint)
         _CACHES[key] = entry
 
@@ -166,7 +205,7 @@ async def generate_and_cache(
     if len(payload) > config.max_schema_chars:
         raise AIFillError("schema_too_large", size=len(payload), limit=config.max_schema_chars)
 
-    # 历史越多越需要多样性
+    # More history → more diversity needed
     temperature = min(1.0, config.llm_temperature + 0.1 * min(len(history), 5))
     instruction = language_instruction(language)
     messages: list[dict] = [

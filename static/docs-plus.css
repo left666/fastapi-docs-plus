@@ -1,8 +1,10 @@
+/* ------------------------------------------------------------------ Base */
 body {
   margin: 0;
   background: #fafafa;
 }
 
+/* -------------------------------------------------------------- Top bar */
 #docs-plus-bar {
   display: flex;
   flex-wrap: wrap;
@@ -60,6 +62,7 @@ body {
   color: #f0b849;
 }
 
+/* ----------------------------------------------- Operation AI buttons */
 .docs-plus-op-summary {
   display: flex;
   align-items: center;
@@ -98,6 +101,7 @@ body {
   cursor: not-allowed;
 }
 
+/* -------------------------------------------------------------- Toast */
 #docs-plus-toast {
   position: fixed;
   right: 20px;

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 
 def _env(*names: str, default: str | None = None) -> str | None:
+    """Read the first non-empty environment variable from *names."""
     for name in names:
         value = os.getenv(name)
         if value:
@@ -14,6 +15,54 @@ def _env(*names: str, default: str | None = None) -> str | None:
 
 @dataclass
 class DocsPlusConfig:
+    """Configuration for fastapi-docs-plus.
+
+    Controls Swagger UI rendering, AI parameter generation, and
+    pre-request hook behaviour.
+
+    Attributes:
+        docs_url: Path for the documentation page (default ``"/docs"``).
+        api_prefix: Prefix for internal API endpoints and static assets
+            (default ``"/_docs"``).
+        openapi_url: URL where Swagger UI fetches the OpenAPI spec
+            (default ``"/openapi.json"``).
+        swagger_ui_version: Swagger UI version used to build CDN URLs
+            (default ``"5.17.14"``).
+        swagger_ui_js_url: Override for the Swagger UI JS bundle URL.
+            When ``None`` the CDN URL is used.
+        swagger_ui_css_url: Override for the Swagger UI CSS URL.
+            When ``None`` the CDN URL is used.
+        swagger_ui_js_integrity: Subresource Integrity hash for the JS
+            bundle. When set, an ``integrity`` attribute is emitted.
+        swagger_ui_css_integrity: Subresource Integrity hash for the
+            CSS. When set, an ``integrity`` attribute is emitted.
+        swagger_ui_parameters: Extra parameters passed to the
+            ``SwaggerUIBundle`` constructor.
+        identities: List of identity labels shown in the top-bar
+            dropdown. An empty list hides the dropdown entirely.
+        identity_label: Label text for the identity dropdown. Can be a
+            plain string or a per-language mapping (``{"en": "...",
+            "zh": "..."}``).
+        llm_model: LLM model identifier (default ``"gpt-4o-mini"``).
+        llm_base_url: Base URL for the OpenAI-compatible API. Reads
+            ``DOCS_PLUS_LLM_BASE_URL`` or ``OPENAI_BASE_URL``.
+        llm_api_key: API key for the LLM service. Reads
+            ``DOCS_PLUS_LLM_API_KEY`` or ``OPENAI_API_KEY``.
+        llm_temperature: Temperature for LLM calls. Automatically
+            increased by ``0.1`` per cached history entry, capped at
+            ``1.0`` (default ``0.3``).
+        llm_timeout: Timeout in seconds for each LLM call
+            (default ``60.0``).
+        max_schema_depth: Maximum depth for inlining ``$ref`` schemas
+            (default ``4``).
+        max_schema_chars: Maximum total characters for the schema plus
+            cached history. Beyond this the request is rejected without
+            calling the LLM (default ``60_000``).
+        ai_cache_max_size: Maximum number of validated AI-generated
+            results kept per operation in the in-memory cache. Oldest
+            entries are evicted first (default ``5``).
+    """
+
     docs_url: str = "/docs"
     api_prefix: str = "/_docs"
     openapi_url: str = "/openapi.json"
@@ -45,7 +94,6 @@ class DocsPlusConfig:
     max_schema_depth: int = 4
     max_schema_chars: int = 60_000
 
-    # 每个接口最多缓存最近多少轮通过校验的 AI 生成结果，超出淘汰最旧
     ai_cache_max_size: int = 5
 
     @property

@@ -1,0 +1,118 @@
+body {
+  margin: 0;
+  background: #fafafa;
+}
+
+#docs-plus-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #1b1b1b;
+  color: #eee;
+  font: 13px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+#docs-plus-bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+#docs-plus-bar select,
+#docs-plus-bar textarea {
+  font: inherit;
+  color: #eee;
+  background: #2c2c2c;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+#docs-plus-bar select:focus-visible,
+#docs-plus-bar textarea:focus-visible,
+.docs-plus-ai-btn:focus-visible {
+  outline: 2px solid #9ecbff;
+  outline-offset: 2px;
+}
+
+#docs-plus-bar textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  margin-top: 6px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+#docs-plus-bar details {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#docs-plus-bar summary {
+  cursor: pointer;
+  color: #9ecbff;
+}
+
+#docs-plus-bar .docs-plus-note {
+  color: #f0b849;
+}
+
+.docs-plus-op-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docs-plus-op-summary > *:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.docs-plus-ai-btn {
+  flex: 0 0 auto;
+  margin-right: 10px;
+  padding: 5px 12px;
+  font: 600 12px/1 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: #fff;
+  background: #4a5cf0;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.docs-plus-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.docs-plus-fill-btn {
+  background: #2b7a3d;
+}
+
+.docs-plus-fill-btn.is-empty {
+  background: #5b6470;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+#docs-plus-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  max-width: 460px;
+  padding: 12px 16px;
+  color: #fff;
+  background: #2b7a3d;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font: 13px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  white-space: pre-wrap;
+}
+
+#docs-plus-toast.is-error {
+  background: #b3323c;
+}

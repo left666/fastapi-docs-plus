@@ -1,8 +1,8 @@
 # fastapi-docs-plus
 
-[![PyPI version](https://img.shields.io/pypi/v/fastapi-docs-plus)](https://pypi.org/project/fastapi-docs-plus/)
-[![Python versions](https://img.shields.io/pypi/pyversions/fastapi-docs-plus)](https://pypi.org/project/fastapi-docs-plus/)
-[![License](https://img.shields.io/pypi/l/fastapi-docs-plus)](https://github.com/left666/fastapi-docs-plus/blob/master/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/fastapi-docs-plus?color=blue)](https://pypi.org/project/fastapi-docs-plus/)
+[![Python versions](https://img.shields.io/pypi/pyversions/fastapi-docs-plus?color=yellow)](https://pypi.org/project/fastapi-docs-plus/)
+[![License](https://img.shields.io/pypi/l/fastapi-docs-plus?color=green)](https://github.com/left666/fastapi-docs-plus/blob/master/LICENSE)
 
 Enhanced interactive API docs for FastAPI that add two capabilities essential for integration and debugging:
 

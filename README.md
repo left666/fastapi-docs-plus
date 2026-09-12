@@ -29,28 +29,39 @@ Requires Python 3.10 or later.
 from fastapi import FastAPI
 from fastapi_docs_plus import DocsPlusConfig, PreRequestContext, setup_docs_plus
 
-# Disable the built-in docs so this library can register /docs
-app = FastAPI(docs_url=None, redoc_url=None)
+# Turn off the built-in docs, otherwise FastAPI's own /docs route takes
+# precedence and this library can never serve the page.
+app = FastAPI(docs_url=None)
 
 # ... your routes ...
 
-# Register the enhanced docs (dev environments only)
+# Register the enhanced docs. Do this in development only: the pre-request
+# hooks run with server-side privileges and the AI endpoints spend your quota.
 docs = setup_docs_plus(app, DocsPlusConfig(identities=["admin", "shop_owner"]))
 
+# Optional — give every request a freshly signed token.
 @docs.pre_request
 async def inject_auth(ctx: PreRequestContext) -> None:
-    """Inject an Authorization header before every request."""
-    if ctx.route_path == "/auth/login":
+    if ctx.route_path == "/auth/login":  # login issues its own token
         return
     username = ctx.identity or "admin"
-    ctx.headers["Authorization"] = f"Bearer {create_token(username)}"
+    token = create_token(username)  # reuse your project's own signing code
+    ctx.headers["Authorization"] = f"Bearer {token}"
 ```
+
+Start the app with an LLM key to enable the AI buttons:
 
 ```bash
 DOCS_PLUS_LLM_API_KEY=sk-xxx uvicorn app.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000/docs` — a toolbar appears at the top with an identity dropdown, and a **Generate** button is shown next to each operation's title.
+Then open `http://127.0.0.1:8000/docs`. Compared with the stock docs you now get:
+
+- a **Generate** button on every operation, which asks the LLM for realistic parameters and caches the validated result;
+- a **Fill** button that writes the next cached result straight into the form;
+- an identity dropdown (populated from `identities`), whose selection reaches your hook as `ctx.identity`.
+
+Without `DOCS_PLUS_LLM_API_KEY` everything still works — the AI buttons are simply not rendered.
 
 ---
 
@@ -180,9 +191,8 @@ When no API key is configured, the AI buttons are not rendered and a notice is s
 | `swagger_ui_css_url` | `None` | Override the CSS URL |
 | `swagger_ui_js_integrity` | `None` | SRI hash for the JS bundle |
 | `swagger_ui_css_integrity` | `None` | SRI hash for the CSS |
-| `swagger_ui_parameters` | (see source) | Extra `SwaggerUIBundle` options |
+| `swagger_ui_parameters` | see below | Extra `SwaggerUIBundle` options; merged key-wise over the defaults, so you only need to pass the keys you want to change |
 | `identities` | `[]` | Identity dropdown options; empty hides the dropdown |
-| `identity_label` | `None` | Dropdown label (plain string or `{"en": ..., "zh": ...}`) |
 | `llm_model` | `"gpt-4o-mini"` | LLM model name |
 | `llm_base_url` | `None` | API base URL (reads `DOCS_PLUS_LLM_BASE_URL` / `OPENAI_BASE_URL`) |
 | `llm_api_key` | `None` | API key (reads `DOCS_PLUS_LLM_API_KEY` / `OPENAI_API_KEY`) |
@@ -191,6 +201,20 @@ When no API key is configured, the AI buttons are not rendered and a notice is s
 | `max_schema_depth` | `4` | Maximum `$ref` inlining depth |
 | `max_schema_chars` | `60000` | Max characters for schema + history; beyond this the request is rejected |
 | `ai_cache_max_size` | `5` | Max cached results per operation; oldest evicted first |
+
+Default `swagger_ui_parameters`:
+
+```python
+{
+    "persistAuthorization": True,
+    "displayRequestDuration": True,
+    "docExpansion": "list",
+    "showExtensions": True,
+    "showCommonExtensions": True,
+}
+```
+
+User-supplied values are merged **key-wise** over these defaults, so you only need to pass the keys you want to change; the remaining keys keep their default values.
 
 ### HTTP endpoints
 
@@ -204,20 +228,6 @@ All are excluded from the OpenAPI document.
 | POST | `{api_prefix}/api/ai/fill` | Retrieve next cached result (409 if empty) |
 | GET | `{api_prefix}/api/ai/cache` | Read cache counts for all operations |
 | POST | `{api_prefix}/api/pre-request` | Execute pre-request hooks and return patches |
-
----
-
-## Public API
-
-```python
-from fastapi_docs_plus import (
-    DocsPlus,           # Main class — register hooks via @docs.pre_request
-    DocsPlusConfig,     # Configuration dataclass
-    PreRequestContext,  # Context object passed to each hook
-    AIFillError,        # Exception raised when AI generation fails
-    setup_docs_plus,    # Convenience factory: setup_docs_plus(app, config)
-)
-```
 
 ---
 

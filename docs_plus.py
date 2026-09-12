@@ -142,7 +142,6 @@ class DocsPlus:
             "openapiUrl": config.openapi_url,
             "apiPrefix": config.api_prefix,
             "identities": config.identities,
-            "identityLabel": config.identity_label,
             "aiEnabled": config.ai_enabled,
             "hasPreRequestHook": bool(self._hooks),
             "swaggerUiParameters": config.swagger_ui_parameters,

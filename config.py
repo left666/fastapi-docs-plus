@@ -13,6 +13,15 @@ def _env(*names: str, default: str | None = None) -> str | None:
     return default
 
 
+_DEFAULT_SWAGGER_UI_PARAMETERS: dict = {
+    "persistAuthorization": True,
+    "displayRequestDuration": True,
+    "docExpansion": "list",
+    "showExtensions": True,
+    "showCommonExtensions": True,
+}
+
+
 @dataclass
 class DocsPlusConfig:
     """Configuration for fastapi-docs-plus.
@@ -37,12 +46,14 @@ class DocsPlusConfig:
         swagger_ui_css_integrity: Subresource Integrity hash for the
             CSS. When set, an ``integrity`` attribute is emitted.
         swagger_ui_parameters: Extra parameters passed to the
-            ``SwaggerUIBundle`` constructor.
+            ``SwaggerUIBundle`` constructor. Merged key-wise over the
+            defaults, so only the keys you provide are overridden and
+            the rest keep their default values. Defaults enable
+            ``persistAuthorization``, ``displayRequestDuration``,
+            ``docExpansion="list"``, ``showExtensions`` and
+            ``showCommonExtensions``.
         identities: List of identity labels shown in the top-bar
             dropdown. An empty list hides the dropdown entirely.
-        identity_label: Label text for the identity dropdown. Can be a
-            plain string or a per-language mapping (``{"en": "...",
-            "zh": "..."}``).
         llm_model: LLM model identifier (default ``"gpt-4o-mini"``).
         llm_base_url: Base URL for the OpenAI-compatible API. Reads
             ``DOCS_PLUS_LLM_BASE_URL`` or ``OPENAI_BASE_URL``.
@@ -72,18 +83,9 @@ class DocsPlusConfig:
     swagger_ui_css_url: str | None = None
     swagger_ui_js_integrity: str | None = None
     swagger_ui_css_integrity: str | None = None
-    swagger_ui_parameters: dict = field(
-        default_factory=lambda: {
-            "tryItOutEnabled": True,
-            "persistAuthorization": True,
-            "displayRequestDuration": True,
-            "docExpansion": "list",
-            "filter": True,
-        }
-    )
+    swagger_ui_parameters: dict = field(default_factory=dict)
 
     identities: list[str] = field(default_factory=list)
-    identity_label: str | dict[str, str] | None = None
 
     llm_model: str = field(default_factory=lambda: _env("DOCS_PLUS_LLM_MODEL", default="gpt-4o-mini"))
     llm_base_url: str | None = field(default_factory=lambda: _env("DOCS_PLUS_LLM_BASE_URL", "OPENAI_BASE_URL"))
@@ -95,6 +97,12 @@ class DocsPlusConfig:
     max_schema_chars: int = 60_000
 
     ai_cache_max_size: int = 5
+
+    def __post_init__(self) -> None:
+        self.swagger_ui_parameters = {
+            **_DEFAULT_SWAGGER_UI_PARAMETERS,
+            **(self.swagger_ui_parameters or {}),
+        }
 
     @property
     def ai_enabled(self) -> bool:

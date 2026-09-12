@@ -135,11 +135,6 @@
     document.querySelectorAll("[data-i18n]").forEach(function (element) {
       element.textContent = t(element.dataset.i18n);
     });
-    var identityLabel = document.getElementById("docs-plus-identity-label");
-    if (identityLabel) {
-      var custom = CONFIG.identityLabel;
-      identityLabel.textContent = (custom && typeof custom === "object" ? custom[language] : custom) || t("identity");
-    }
     var textarea = document.querySelector("#docs-plus-bar textarea");
     if (textarea) textarea.setAttribute("aria-label", t("extraEnv"));
     document.querySelectorAll(".docs-plus-generate-btn").forEach(function (button) {
@@ -275,9 +270,7 @@
 
     if (CONFIG.identities && CONFIG.identities.length) {
       var label = document.createElement("label");
-      var caption = document.createElement("span");
-      caption.id = "docs-plus-identity-label";
-      label.appendChild(caption);
+      label.appendChild(localizedElement("span", "identity"));
       var select = document.createElement("select");
       CONFIG.identities.forEach(function (name) {
         var option = document.createElement("option");

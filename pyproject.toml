@@ -41,4 +41,9 @@ packages = ["fastapi_docs_plus", "fastapi_docs_plus.static"]
 package-dir = {"fastapi_docs_plus" = "."}
 
 [tool.setuptools.package-data]
-fastapi_docs_plus = ["static/*"]
+fastapi_docs_plus = [
+    "static/adapter.js",
+    "static/docs-plus.css",
+    "static/docs-plus.js",
+    "static/docs.html",
+]

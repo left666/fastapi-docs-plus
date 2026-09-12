@@ -11,7 +11,7 @@ Enhanced interactive API docs for FastAPI that add two capabilities essential fo
 
 It replaces FastAPI's built-in `/docs` while keeping Swagger UI as the rendering engine — no fork, no custom frontend build.
 
-![fastapi-docs-plus demo](static/demo.png)
+![fastapi-docs-plus demo](https://raw.githubusercontent.com/left666/fastapi-docs-plus/master/static/demo.png)
 
 ---
 
